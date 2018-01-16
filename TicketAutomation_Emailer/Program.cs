@@ -23,6 +23,7 @@ namespace TicketAutomation_Emailer
         {
             DAL objDAL = new DAL();
             DataTable dt = new DataTable();
+            DataTable dtConfigReport = getConfig("Report");
             string filePath = ConfigurationManager.AppSettings["folderPath"].ToString() + "WeeklyReport.xlsx";
             string Query = "usp_get_WeeklyReportData";
             objDAL.CommandText = Query;
@@ -30,23 +31,69 @@ namespace TicketAutomation_Emailer
             XLWorkbook wb = new ClosedXML.Excel.XLWorkbook();
             wb.Worksheets.Add(dt);
             wb.SaveAs(filePath);
+            sendEmail("", dtConfigReport, "", filePath);
          }
 
-        private static void sendEmail(string url, string to, string cc, string name, string emailBody, string attachmentPath)
+        private static DataTable getConfig(string type)
+        {
+            DAL objDal = new DAL();
+            objDal.AddParameter("@type", type);
+            DataTable dt = objDal.ExecuteDataSet("usp_getConfigDetails").Tables[0];
+            return dt;
+        }
+
+        private static void sendEmail(string url, DataTable config, string name, string attachmentPath)
         {
             try
             {
                 MailMessage mail = new MailMessage();
                 SmtpClient SmtpServer = new SmtpClient();
+                string[] cclist = { },
+                         tolist = { };
+
+                string subject = "",
+                        body = "";
+
+                foreach(DataRow dr in config.Rows)
+                {
+                    if (dr["Key"].ToString().ToLower().Contains("to"))
+                        tolist = dr["Value"].ToString().Split(',');
+
+                    else if(dr["Key"].ToString().ToLower().Contains("cc"))
+                        cclist = dr["Value"].ToString().Split(',');
+
+                    else if (dr["Key"].ToString().ToLower().Contains("body"))
+                        body = dr["Value"].ToString();
+
+                    else if (dr["Key"].ToString().ToLower().Contains("subject"))
+                        subject = dr["Value"].ToString();
+                }
+
+                if(tolist.Count() > 0)
+                {
+                    foreach(string to in tolist)
+                    {
+                        mail.To.Add(to);
+                    }
+                }
+
+                if (cclist.Count() > 0)
+                {
+                    foreach (string cc in cclist)
+                    {
+                        mail.CC.Add(cc);
+                    }
+                }
+
                 if (attachmentPath.Length > 0)
                 {
                     System.Net.Mail.Attachment attachment = new System.Net.Mail.Attachment(attachmentPath);
                     mail.Attachments.Add(attachment);
                 }
                 mail.From = new MailAddress("niyasatwork@gmail.com");
-                mail.To.Add(to);
-                mail.Subject = "Ticket Automation Email";
-                mail.Body = "Hi " + name + ",<br/>" + emailBody;
+                
+                mail.Subject = subject;
+                mail.Body =  body;
                 mail.IsBodyHtml = true;
                 SmtpServer.Host = "smtp.gmail.com";
                 SmtpServer.Port = 587;
