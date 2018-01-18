@@ -16,7 +16,31 @@ namespace TicketAutomation_Emailer
     {
         static void Main(string[] args)
         {
-            getReport();
+            if (args[0].ToString() == "report")
+                getReport();
+            else if (args[0].ToString() == "reminder")
+                Notification("ReminderNotice");
+            else if (args[0].ToString() == "reminder")
+                Notification("FinalNotice");
+        }
+
+        private static void Notification(string noticeType)
+        {
+            DAL objDAL = new DAL();
+            DataTable dt = new DataTable();
+            DataTable dtConfig = getConfig("updateIMS");
+            string applicationUrl = ConfigurationManager.AppSettings["automationToolUrl"].ToString();
+            var query = from d in dtConfig.AsEnumerable()
+                        where d.Field<string>("Key").Contains(noticeType)
+                        select d;
+            DataTable dtConfigReminder = query.CopyToDataTable<DataRow>();
+            objDAL.CommandText = "usp_GetAssigneeWithPendingTickets";
+            dt = objDAL.ExecuteDataSet().Tables[0];
+            foreach(DataRow dr in dt.Rows)
+            {
+                string assignee = dr[0].ToString().ToLower().Replace(" ", "");
+                sendEmail(applicationUrl + assignee, dtConfigReminder, dr[1].ToString(), "");
+            }
         }
 
         private static void getReport()
@@ -42,14 +66,14 @@ namespace TicketAutomation_Emailer
             return dt;
         }
 
-        private static void sendEmail(string url, DataTable config, string name, string attachmentPath)
+        private static void sendEmail(string url, DataTable config, string to, string attachmentPath)
         {
             try
             {
                 MailMessage mail = new MailMessage();
                 SmtpClient SmtpServer = new SmtpClient();
-                string[] cclist = { },
-                         tolist = { };
+                string[] cclist = {},
+                         tolist = { to };
 
                 string subject = "",
                         body = "";
@@ -71,9 +95,9 @@ namespace TicketAutomation_Emailer
 
                 if(tolist.Count() > 0)
                 {
-                    foreach(string to in tolist)
+                    foreach(string tos in tolist)
                     {
-                        mail.To.Add(to);
+                        mail.To.Add(tos);
                     }
                 }
 
@@ -90,6 +114,9 @@ namespace TicketAutomation_Emailer
                     System.Net.Mail.Attachment attachment = new System.Net.Mail.Attachment(attachmentPath);
                     mail.Attachments.Add(attachment);
                 }
+
+                body = url.Length > 0 ? body + "<br/>" + url : body;
+
                 mail.From = new MailAddress("niyasatwork@gmail.com");
                 
                 mail.Subject = subject;
